@@ -1,0 +1,128 @@
+!!
+!!
+!! 1. INPUT PARAMETERS
+!!
+!!
+
+!!
+!! 1.1 GEOMETRY
+!!
+
+!! 1.1.1 BEAM
+!!
+! Length
+GEO_length=0.5
+
+! Depth
+GEO_depth=0.15
+
+! Flange width
+GEO_width=0.05
+
+! Thickness
+GEO_thk=0.0017
+
+! Flange stiffener depth
+GEO_flangeStf=0.025
+
+! Web stiffener height
+GEO_webStf_h=0.005
+
+! Web stiffener base
+GEO_webStf_b=0.01
+
+! Number of web stiffeners
+GEO_webStf_count=2
+
+! Web stiffener spacing
+GEO_webStf_spacing=0.09
+!
+!
+!! 1.1.2 HOLES
+!!
+! Connected plates:
+!    [1] Web only
+!    [2] Flanges only
+!    [3] Web and flanges
+GEO_connect=1
+
+! Bolt diameter
+GEO_bolt_D=0.0127
+
+! Nut diameter
+GEO_nut_D
+
+! Washer diameter
+GEO_washer_D=0.018
+
+! Hole diameter
+GEO_hole_D=0.0141
+
+! First hole column offset
+GEO_hole_Offset=0.04
+
+! Hole longitudinal spacing
+GEO_hole_sz=0.12
+
+! Hole transversal spacing
+GEO_hole_sy=0.07
+
+! Number of hole columns
+GEO_hole_cols=2
+
+! Number of holes on the web per column
+GEO_hole_rows=2
+!
+!
+!
+!!
+!! 1.2 MATERIALS
+!!
+! Elastic modulus
+MAT_CFSTEEL_E=2e11
+
+! Poisson's coefficient
+MAT_CFSTEEL_Poisson=0.3
+
+! Yield strength
+MAT_CFSTEEL_fy=400e6
+
+! Tangent modulus
+MAT_CFSTEEL_Et=2e5
+
+! Ultimate strength
+MAT_CFSTEEL_fu=550e6
+!
+!
+!
+!!
+!! 1.3 LOADS
+!!
+! Load application option:
+!    [1] Apply force
+!    [2] Apply displacement
+LOAD_opt=2
+
+! Load value (N if LOAD_opt=1; m if LOAD_opt=2)
+LOAD_value=0.1
+!
+!
+!
+!!
+!! 1.4 MESH
+!!
+FEM_esize=2
+!
+!
+!
+!!
+!! 1.5 SOLUTION
+!!
+SOLU_nsubst=100
+
+
+
+
+!!
+CFCONNECT_V0_MODEL
+

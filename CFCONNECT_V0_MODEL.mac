@@ -1,0 +1,611 @@
+
+!!
+!!
+!! 2. ATTRIBUTES
+!!
+!!
+/prep7
+
+!!
+!! 2.1 CONSTANTS
+!!
+pi=acos(-1)
+
+MAT_CFSTEEL=1
+
+SEC_CFBEAM=1
+
+TYPE_SHELL181=1
+
+CS_bolt0=100
+!
+!
+!
+!!
+!! 2.1 GEOMETRY
+!!
+! Web stiffener Y positions
+*if,GEO_webStf_count,gt,0,then
+    GEO_webStf_y0=(GEO_depth-((GEO_webStf_count-1)*GEO_webStf_sy))/2
+    *del,GEO_webStf_y
+    *dim,GEO_webStf_y,,GEO_webStf_count
+    *vfill,GEO_webStf_y,ramp,GEO_webStf_y0,GEO_webStf_sy
+*endif
+
+! Connected plates
+*if,GEO_connect,eq,1,then
+    GEO_connect_web=1
+    GEO_connect_flange=0
+*elseif,GEO_connect,eq,2,then
+    GEO_connect_web=0
+    GEO_connect_flange=1
+*elseif,GEO_connect,eq,3,then
+    GEO_connect_web=1
+    GEO_connect_flange=1
+*endif
+
+! Bolt X positions
+*del,GEO_hole_x
+*dim,GEO_hole_x,,GEO_hole_cols
+*vfill,GEO_hole_x,ramp,GEO_hole_Offset,GEO_hole_sz
+
+! Web bolt Y positions
+*if,GEO_connect_web,eq,1,then
+    GEO_hole_y0=(GEO_depth-((GEO_hole_rows-1)*GEO_hole_sy))/2
+    *del,GEO_hole_y
+    *dim,GEO_hole_y,,GEO_hole_rows
+    *vfill,GEO_hole_y,ramp,GEO_hole_y0,GEO_hole_sy
+*endif
+!
+!
+!
+!!
+!! 2.2 ELEMENT TYPES
+!!
+et,TYPE_SHELL181,181
+!
+!
+!
+!!
+!! 2.3 MATERIALS
+!!
+steel, MAT_CFSTEEL, MAT_CFSTEEL_E, MAT_CFSTEEL_fy, MAT_CFSTEEL_Et, MAT_CFSTEEL_fu, ,MAT_CFSTEEL_Poisson
+!
+!
+!
+!!
+!! 2.4 SECTIONS
+!!
+sectype,SEC_CFBEAM,shell,,'CFTHK'
+secdata,GEO_thk,MAT_CFSTEEL
+!
+!
+!
+!
+!
+!!
+!!
+!! 3. SOLID MODEL
+!!
+!!
+/prep7
+
+!!
+!! 3.1 DRAW BEAM
+!!
+! Keypoint numbers
+*do,nthKP,1,6,1
+    k%nthKP%=nthKP
+*enddo
+
+! Draw basic U shape
+k , k1 , GEO_width ,         0 , 0
+k , k2 ,         0 ,         0 , 0
+k , k3 ,         0 , GEO_depth , 0
+k , k4 , GEO_width , GEO_depth , 0
+
+l , k1 , k2
+l , k2 , k3
+l , k3 , k4
+
+! Draw flange stiffeners
+*if,GEO_flangeStf,gt,0,then
+    k , k5 , GEO_width ,           GEO_flangeStf , 0
+    k , k6 , GEO_width , GEO_depth-GEO_flangeStf , 0
+
+    l , k5 , k1
+    l , k6 , k4
+*endif
+
+! Draw web stiffeners
+*if,GEO_webStf_count,gt,0,then
+    lsel,s,loc,x,0
+    wprota,,-90
+    *do,nthStf,1,GEO_webStf_count,1
+        y_center=GEO_webStf_y(nthStf)
+        y_above=y_center+(GEO_webStf_b/2)
+        y_below=y_center-(GEO_webStf_b/2)
+
+        wpoffs,,,y_center
+        lsbw,all,,delete
+        wpoffs,,,-y_center
+
+        wpoffs,,,y_above
+        lsbw,all,,delete
+        wpoffs,,,-y_above
+
+        wpoffs,,,y_below
+        lsbw,all,,delete
+        wpoffs,,,-y_below
+
+        k_center=kp(0,y_center,0)
+        kmodif,k_center,GEO_webStf_h
+    *enddo
+    wprota,,90
+*endif
+
+! Selection component
+allsel
+cm,COMPL_beam,line
+cm,COMPK_beam,kp
+
+! Axis line
+*get,KMXD,kp,,num,maxd
+ki=KMXD+1
+kj=KMXD+2
+lsel,u,line,,all
+k , ki , 0 , 0 ,          0
+k , kj , 0 , 0 , GEO_length
+l , ki , kj
+l_axis=lsnext(0)
+
+! Extrude
+allsel
+adrag,COMPL_beam,,,,,,l_axis
+ldele,l_axis,,,1
+nummrg,kp
+
+! Selection components
+asel,s,loc,y,0
+cm,COMPA_flangeBot,area
+asel,s,loc,y,GEO_depth
+cm,COMPA_flangeTop,area
+allsel
+cmsel,u,COMPA_flangeTop
+cmsel,u,COMPA_flangeBot
+cm,COMPA_web,area
+allsel
+!
+!
+!
+!!
+!! 3.2 CUT HOLES
+!!
+bolt_counter=0
+
+!! 3.2.1 WEB HOLES
+!!
+*if,GEO_connect_web,eq,1,then
+
+    *do,nthCol,1,GEO_hole_cols,1
+        wpcsys,0
+        wprota,,,-90
+        x_center=GEO_hole_x(nthCol)
+        wpoffs,x_center
+
+        *do,nthRow,1,GEO_hole_rows,1
+            csys,0
+            bolt_counter=bolt_counter+1
+            CS_name='CS_BOLT_%bolt_counter%'
+            %CS_name%=CS_bolt0+bolt_counter
+            y_center=GEO_hole_y(nthRow)
+            wpoffs,,y_center
+            cswpla,%CS_name%,cylin
+
+            asel,u,area,,all
+            cyl4,0,0,GEO_hole_D/2
+            a_sub=arnext(0)
+            cmsel,a,COMPA_web
+            asba,COMPA_web,a_sub,,delete,delete
+            cm,COMPA_web,area
+
+            asel,u,area,,all
+            cyl4,0,0,GEO_nut_D/2
+            lsla,s
+            cm,COMPA_slicer,area
+            cm,COMPL_slicer,line
+            cmsel,s,COMPA_web
+            asbl,COMPA_web,COMPL_slicer,,delete,keep
+            cm,COMPA_web,area
+            asel,r,loc,x,0,GEO_nut_D/2
+            cmpadd,'COMPA_nut'
+            cmsel,s,COMPA_slicer
+            lsla,s
+            ksll,s
+            adele,all,,,1
+
+            asel,u,area,,all
+            cyl4,0,0,GEO_bolt_D/2
+            cmpadd,'COMPA_bolt'
+
+            wpoffs,,-y_center
+            csys,0
+        *enddo
+
+        wpoffs,GEO_hole_sz
+    *enddo
+*endif
+!
+!
+!! 3.2.2 FLANGE HOLES
+!!
+*if,GEO_connect_flange,eq,1,then
+
+    *do,nthFlange,1,2,1
+        wpcsys,,0
+        wprota,,,-90
+        wprota,,-90,
+
+        flangeY=GEO_depth*(nthFlange-1)
+        wpoffs,,,flangeY
+        asel,s,loc,y,flangeY
+        cm,COMPA_flange,area
+
+        *do,nthCol,1,GEO_hole_cols,1
+            x_center=GEO_hole_x(nthCol)
+            wpoffs,x_center
+
+            csys,0
+            bolt_counter=bolt_counter+1
+            CS_name='CS_BOLT_%bolt_counter%'
+            %CS_name%=CS_bolt0+bolt_counter
+            y_center=GEO_width/2
+            wpoffs,,y_center
+            cswpla,%CS_name%,cylin
+
+            asel,u,area,,all
+            cyl4,0,0,GEO_hole_D/2
+            a_sub=arnext(0)
+            cmsel,a,COMPA_flange
+            asba,COMPA_flange,a_sub,,delete,delete
+            cm,COMPA_flange,area
+
+            asel,u,area,,all
+            cyl4,0,0,GEO_nut_D/2
+            lsla,s
+            cm,COMPA_slicer,area
+            cm,COMPL_slicer,line
+            cmsel,s,COMPA_flange
+            asbl,COMPA_flange,COMPL_slicer,,delete,keep
+            cm,COMPA_flange,area
+            asel,r,loc,x,0,GEO_nut_D/2
+            cmpadd,'COMPA_nut'
+            cmsel,s,COMPA_slicer
+            lsla,s
+            ksll,s
+            adele,all,,,1
+
+            asel,u,area,,all
+            cyl4,0,0,GEO_bolt_D/2
+            cmpadd,'COMPA_bolt'
+
+            wpoffs,,-y_center
+            wpoffs,-x_center
+            csys,0
+        *enddo
+
+        wpoffs,GEO_hole_sz
+    *enddo
+
+*endif
+
+GEO_bolt_count=bolt_counter
+
+! Selection components
+asel,s,loc,y,0
+cm,COMPA_flangeBot,area
+asel,s,loc,y,GEO_depth
+cm,COMPA_flangeTop,area
+allsel
+cmsel,u,COMPA_flangeTop
+cmsel,u,COMPA_flangeBot
+cm,COMPA_web,area
+allsel
+
+wpstyl,,,,,,,,-1
+!
+!
+!
+!
+!
+!!
+!!
+!! 4. FINITE ELEMENT MODEL
+!!
+!!
+
+!!
+!! 4.1 MESH
+!!
+allsel
+aatt,MAT_CFSTEEL,,TYPE_SHELL181,,SEC_CFBEAM
+
+cmsel,s,COMPA_bolt
+aesize,all,GEO_bolt_D/3 !FEM_esize!/5
+
+cmsel,s,COMPA_nut
+aesize,all,FEM_esize !/2
+
+cmsel,s,COMPA_web
+cmsel,a,COMPA_flangeTop
+cmsel,a,COMPA_flangeBot
+cmsel,u,COMPA_bolt
+cmsel,u,COMPA_nut
+aesize,all,FEM_esize
+
+allsel
+amesh,all
+!
+!/eof
+!
+!!
+!! 4.2 CONTACTS
+!!
+
+!!
+!    *do,nthBolt,1,GEO_bolt_count,1
+!        CS_name='CS_BOLT_%nthBolt%'
+!        csys,%CS_name%
+!
+!        cmsel,s,COMPA_Bolt
+!        lsla,s
+!        lsel,r,loc,x,GEO_bolt_d/2
+!        nsll,s,1
+!        cm,COMPN_target,line
+!        !asel,r,loc,x,0,GEO_bolt_d/2
+!        !cm,COMPA_target,area
+!
+!        lsel,s,loc,x,GEO_hole_d/2
+!        nsll,s,1
+!        cm,COMPN_contact,line
+!        !asel,s,loc,x,0,GEO_nut_d/2
+!        !cmsel,u,COMPA_target
+!        !cm,COMPA_contact,area
+!
+!        cnt,'COMPN_target','COMPN_contact',170,175
+!        csys,0
+!    *enddo
+!!
+cmsel,s,COMPA_bolt
+cmsel,a,COMPA_nut
+esla,s
+nsle,s,active
+gcdef,auto
+gcgen,new,,2,,select
+allsel
+!!
+
+!
+!
+!
+!
+!!
+!!
+!! 5. BOUNDARY CONDITIONS
+!!
+!!
+
+!!
+!! 5.1 BOLT SUPPORTS
+!!
+cmsel,s,COMPA_bolt
+nsla,s,1
+d,all,all,0
+!
+!
+!
+!!
+!! 5.2 NUTS/WASHERS SUPPORTS
+!!
+
+!! 5.2.1 WEB
+!!
+cmsel,s,COMPA_nut
+cmsel,r,COMPA_web
+*get,ac,area,,count
+*if,ac,gt,0,then
+    nsla,s,1
+    d,all,ux,0
+*endif
+!
+!
+!! 5.2.2 FLANGES
+!!
+cmsel,s,COMPA_flangeBot
+cmsel,a,COMPA_flangeTop
+cmsel,r,COMPA_nut
+*get,ac,area,,count
+*if,ac,gt,0,then
+    nsla,s,1
+    d,all,uy,0
+*endif
+!
+!
+!
+!!
+!! 5.3 TRANSVERSAL SUPPORTS
+!!
+lsel,s,loc,z,GEO_length
+lsel,a,loc,z,0
+nsll,s,1
+d,all,ux,0,,,,uy
+!
+!
+!
+!!
+!! 5.4 WRITE LS: SUPPORTS
+!!
+allsel
+lswrite,10
+!
+!
+!
+!!
+!! 5.5 AXIAL BEAM LOAD
+!!
+*if,LOAD_valueZ,ne,0,then
+    allsel
+    lsclear,all
+    lsread,10
+
+    lsel,s,loc,z,GEO_length
+    nsll,s,1
+
+    *if,LOAD_opt,eq,1,then
+        ! Apply force:
+        *get,nc,node,,count
+        f_nodal=LOAD_valueZ/nc
+        f,all,fz,f_nodal
+    *elseif,LOAD_opt,eq,2,then
+        ! Apply displacement:
+        d,all,uz,LOAD_valueZ
+    *endif
+
+    allsel
+    lswrite,LOAD_lsZ
+*endif
+!
+!
+!
+!!
+!! 5.6 TRANSVERSAL BEAM LOAD
+!!
+*if,LOAD_valueY,ne,0,then
+    allsel
+    lsclear,all
+    lsread,10
+
+    lsel,s,loc,z,GEO_length
+    lsel,a,loc,z,0
+    nsll,s,1
+
+    *if,LOAD_opt,eq,1,then
+        ! Apply force:
+        *get,nc,node,,count
+        f_nodal=LOAD_valueY/nc
+        f,all,fy,f_nodal
+    *elseif,LOAD_opt,eq,2,then
+        ! Apply displacement:
+        d,all,uy,LOAD_valueY
+    *endif
+
+    allsel
+    lswrite,LOAD_lsY
+*endif
+!
+!
+!
+!
+!!
+!!
+!! 6. SOLUTION
+!!
+!!
+/solu
+allsel
+
+antype,0
+nlgeom,on
+nsubst,SOLU_nsubst,,SOLU_nsubst/5
+outres,erase
+outres,all,all
+
+lssolve,1,(LOAD_lsZ>LOAD_lsY)
+!
+!
+!
+!
+!
+!!
+!!
+!! 7. POST-PROCESS
+!!
+!!
+/post1
+
+view4w
+
+clims
+set,last
+plnsol,s,eqv
+takepic,'seqv'
+
+clims,0,1e-8
+plnsol,eppl,eqv
+takepic,'eppl'
+
+view1w
+clims
+
+
+/post26
+/color,curve,blue,1
+numvar,200
+solu,191,ncmit
+store,merge
+
+cmsel,s,COMPA_bolt
+nsla,s,1
+rsum,'FZ',10,'RZ'
+add,19,10,,,'RZ_kN',,,1e-3
+abs,20,19,,,'ABS_RZ'
+
+rsum,'FY',11,'RY'
+add,21,11,,,'RY_kN',,,1e-3
+abs,22,21,,,'ABS_RY'
+
+allsel
+n_end=node(0,GEO_depth/2,GEO_length)
+nsol,29,n_end,u,z,'UZ'
+add,30,29,,,'UZ_mm',,,1e3
+nsol,31,n_end,u,y,'UY'
+add,32,31,,,'UY_mm',,,1e3
+
+
+*del,rz_kn
+vget,rz_kn,20
+*vscfun,rz_max,max,rz_kn
+rz_max=nint(100*rz_max)/100
+
+*del,ry_kn
+vget,ry_kn,22
+*vscfun,ry_max,max,ry_kn
+ry_max=nint(100*ry_max)/100
+
+t_mm=nint(1000*GEO_thk*100)/100
+
+/axlab,X,'ALONGAMENTO [mm]'
+/axlab,Y,'CARGA [kN]'
+
+/title,'t=%t_mm%mm, FRk=%rz_max%kN'
+xvar,30
+plvar,20
+
+takepic,'FZxUZ',800
+
+
+/title,'t=%t_mm%mm, FRk=%ry_max%kN'
+xvar,32
+plvar,22
+
+takepic,'FYxUY',800
+
+! GRANIM, xVarNum, yVarNum, name, xRangeMode, yRangeMode, tInterval, tTotal
+ !granim, 30, 20, 'FxU',1,1,,5
+
+
+
+
+
+
+
